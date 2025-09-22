@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Мини-ИИ офлайн</title>
+<style>
+body{font-family:sans-serif;max-width:600px;margin:auto;padding:20px;}
+#chat{border:1px solid #ccc;height:300px;overflow-y:auto;padding:10px;}
+.user{color:blue;} .bot{color:green;}
+</style>
+</head>
+<body>
+<h1>Мини-ИИ полностью офлайн</h1>
+<div id="chat"></div>
+<input id="input" placeholder="Скажи что-нибудь..." style="width:70%">
+<button onclick="send()">Отправить</button>
+
+<script>
+// Мини-словарь и простые ответы
+const knowledge = {
+  "привет": ["Привет!", "Здравствуйте!", "Хэй!"],
+  "как дела": ["Отлично!", "Нормально, а у тебя?", "Все супер!"],
+  "пока": ["До встречи!", "Пока!", "Увидимся!"]
+};
+
+// Мини-генерация на основе словаря
+function reply(msg){
+  msg = msg.toLowerCase();
+  for(let key in knowledge){
+    if(msg.includes(key)){
+      let answers = knowledge[key];
+      return answers[Math.floor(Math.random()*answers.length)];
+    }
+  }
+  // простая генерация: случайное предложение
+  const random = ["Интересно...", "Расскажи больше.", "Я тебя слушаю."];
+  return random[Math.floor(Math.random()*random.length)];
+}
+
+function send(){
+  const input = document.getElementById("input");
+  const chat = document.getElementById("chat");
+  let msg = input.value;
+  chat.innerHTML += `<div class="user"><b>Ты:</b> ${msg}</div>`;
+  let ans = reply(msg);
+  chat.innerHTML += `<div class="bot"><b>ИИ:</b> ${ans}</div>`;
+  input.value="";
+  chat.scrollTop = chat.scrollHeight;
+}
+</script>
+</body>
+</html>
