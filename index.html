@@ -1,27 +1,72 @@
-<input type="file" id="imgInput"/>
-<p id="caption"></p>
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Offline Image Captioning with LLaMA.js</title>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script src="https://cdn.jsdelivr.net/npm/llama.js/dist/llama.js"></script>
+<style>
+  body { font-family: Arial; padding: 20px; }
+  #imgPreview { max-width: 300px; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<h2>Offline Image Captioning with LLaMA.js</h2>
+<input type="file" id="imgInput" accept="image/*">
+<br>
+<img id="imgPreview" />
+<p id="caption">Описание изображения появится здесь...</p>
+
 <script>
-  const imgInput = document.getElementById('imgInput');
-  const captionEl = document.getElementById('caption');
+const imgInput = document.getElementById('imgInput');
+const imgPreview = document.getElementById('imgPreview');
+const captionEl = document.getElementById('caption');
+let model;
 
-  imgInput.addEventListener('change', async (event) => {
-    const file = event.target.files[0];
-    const img = new Image();
-    img.src = URL.createObjectURL(file);
-    await img.decode();
+// Загружаем MobileNet (TF.js) и LLaMA.js модель
+async function loadModels() {
+  // MobileNet энкодер
+  model = await tf.loadGraphModel(
+    'https://tfhub.dev/google/tfjs-model/imagenet/mobilenet_v2_140_224/classification/3/default/1',
+    {fromTFHub:true}
+  );
+  console.log('Энкодер загружен');
 
-    // Загружаем предобученный энкодер (MobileNet)
-    const model = await tf.loadGraphModel('https://tfhub.dev/google/tfjs-model/imagenet/mobilenet_v2_140_224/classification/3/default/1', {fromTFHub:true});
-    
-    const tensor = tf.browser.fromPixels(img).resizeBilinear([224,224]).expandDims().div(255);
-    const features = model.predict(tensor); // feature vector
+  // LLaMA.js (tiny LLaMA)
+  window.llm = new LLaMA();
+  await llm.init({ modelUrl: 'path/to/llama-124M/ggml-model-q4_0.bin' }); // локальный путь
+  console.log('LLM загружена');
+}
 
-    // Здесь подключаем tiny GPT/LLM (например, llama.js) для генерации текста
-    // pseudo-code:
-    // const caption = await tinyGPT.generate(features);
-    
-    captionEl.innerText = "Описание изображения: " + "Здесь будет текст от LLM";
-  });
+imgInput.addEventListener('change', async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  imgPreview.src = URL.createObjectURL(file);
+  await imgPreview.decode();
+
+  // Feature vector через MobileNet
+  const tensor = tf.browser.fromPixels(imgPreview)
+                  .resizeBilinear([224,224])
+                  .expandDims()
+                  .div(255);
+
+  const features = model.predict(tensor);
+  const featureArray = await features.data();
+  const featureStr = featureArray.slice(0,20).join(','); // первые 20 элементов для prompt
+
+  // Генерируем текст через LLaMA.js
+  const prompt = `Опиши изображение по этим признакам: [${featureStr}]`;
+  const output = await llm.generate(prompt, { max_new_tokens: 50 });
+  
+  captionEl.innerText = output;
+});
+
+// Загружаем модели при старте
+loadModels();
 </script>
+
+</body>
+</html>
