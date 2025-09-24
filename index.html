@@ -2,11 +2,11 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Автономный ИИ, который обучается сам</title>
+<title>ИИ с интерактивным помощником</title>
 <style>
 body { font-family: Arial; background: #f0f0f0; }
-.container { max-width: 600px; margin: 50px auto; padding: 20px; background: #fff; border-radius: 10px; }
-.chat-box { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; background: #fafafa; }
+.container { max-width: 700px; margin: 30px auto; padding: 20px; background: #fff; border-radius: 10px; }
+.chat-box { height: 250px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; background: #fafafa; }
 input { width: calc(100% - 110px); padding: 10px; margin-right: 5px; }
 button { padding: 10px; width: 100px; margin-bottom: 5px; }
 .message { margin-bottom: 10px; }
@@ -16,37 +16,50 @@ button { padding: 10px; width: 100px; margin-bottom: 5px; }
 .assistant-log { font-size: 0.9em; color: #555; margin-bottom: 10px; }
 .phrases-box { max-height: 120px; overflow-y: auto; border: 1px solid #ccc; padding: 5px; margin-bottom: 10px; background: #eef; }
 .phrase-item { display: flex; justify-content: space-between; margin-bottom: 3px; }
+#assistantChat { display: none; border: 1px solid #aaa; padding: 10px; margin-bottom: 10px; background: #fdfdfd; }
 </style>
 </head>
 <body>
 <div class="container">
-<h1>Автономный ИИ с самостоят. обучением</h1>
+<h1>ИИ с интерактивным помощником</h1>
 
 <button id="trainingToggle">Включить обучение</button>
 <div class="assistant-log" id="assistantLog">Обучение выключено</div>
 
+<h2>Основной чат</h2>
 <div class="chat-box" id="chatBox"></div>
-
 <input type="text" id="userInput" placeholder="Введите сообщение..." />
 <button id="sendBtn">Отправить</button>
 
 <h3>Список обученных фраз:</h3>
 <div class="phrases-box" id="phrasesBox"></div>
+
+<div id="assistantChat">
+<h2>Чат с помощником</h2>
+<div class="chat-box" id="assistantBox"></div>
+<input type="text" id="assistantInput" placeholder="Введите фразу для обучения..." />
+<button id="assistantSend">Добавить в обучение</button>
+</div>
 </div>
 
 <script>
 const chatBox = document.getElementById("chatBox");
-const input = document.getElementById("userInput");
+const userInput = document.getElementById("userInput");
 const sendBtn = document.getElementById("sendBtn");
 const trainingToggle = document.getElementById("trainingToggle");
 const assistantLog = document.getElementById("assistantLog");
 const phrasesBox = document.getElementById("phrasesBox");
 
+const assistantChatDiv = document.getElementById("assistantChat");
+const assistantBox = document.getElementById("assistantBox");
+const assistantInput = document.getElementById("assistantInput");
+const assistantSend = document.getElementById("assistantSend");
+
 let trainingEnabled = false;
 let chatHistory = JSON.parse(localStorage.getItem("chatHistory")) || [];
 let trainedPhrases = JSON.parse(localStorage.getItem("trainedPhrases")) || [];
 
-// Показ фраз
+// --- Рендер обученных фраз ---
 function renderPhrases() {
   phrasesBox.innerHTML = '';
   trainedPhrases.forEach((phrase, idx) => {
@@ -63,58 +76,51 @@ function removePhrase(idx) {
   renderPhrases();
 }
 
-// Показ истории
-chatHistory.forEach(msg => addMessage(msg.sender, msg.text, msg.className));
+// --- Показ истории основного чата ---
+chatHistory.forEach(msg => addMessage(chatBox, msg.sender, msg.text, msg.className));
 renderPhrases();
 
 trainingToggle.addEventListener("click", () => {
   trainingEnabled = !trainingEnabled;
   trainingToggle.innerText = trainingEnabled ? "Выключить обучение" : "Включить обучение";
   assistantLog.innerText = trainingEnabled ? "Обучение включено" : "Обучение выключено";
-
-  // Если включили обучение — запускаем автоматический генератор фраз каждые 10 секунд
-  if(trainingEnabled){
-    if(!window.autoTrainInterval){
-      window.autoTrainInterval = setInterval(() => {
-        autoTrain();
-      }, 10000);
-    }
-  } else {
-    clearInterval(window.autoTrainInterval);
-    window.autoTrainInterval = null;
-  }
+  assistantChatDiv.style.display = trainingEnabled ? "block" : "none";
 });
 
-sendBtn.addEventListener("click", sendMessage);
-input.addEventListener("keydown", e => { if(e.key==="Enter") sendMessage(); });
+// --- Основной чат ---
+sendBtn.addEventListener("click", ()=>sendMessage());
+userInput.addEventListener("keydown", e => { if(e.key==="Enter") sendMessage(); });
 
-function sendMessage(){
-  const text = input.value.trim();
+function sendMessage() {
+  const text = userInput.value.trim();
   if(!text) return;
-  addMessage("Вы", text, "user");
+  addMessage(chatBox, "Вы", text, "user");
   chatHistory.push({sender:"Вы", text, className:"user"});
   localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
-  input.value="";
+  userInput.value = "";
 
   const reply = generateResponse(text);
-  addMessage("ИИ", reply, "bot");
+  addMessage(chatBox, "ИИ", reply, "bot");
   chatHistory.push({sender:"ИИ", text:reply, className:"bot"});
   localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
-
-  if(trainingEnabled){
-    trainOnConversation(text, reply);
-  }
 }
 
-function addMessage(sender, text, className){
-  const div = document.createElement("div");
-  div.className = `message ${className}`;
-  div.innerHTML = `<strong>${sender}:</strong> ${text}`;
-  chatBox.appendChild(div);
-  chatBox.scrollTop = chatBox.scrollHeight;
+// --- Чат с помощником ---
+assistantSend.addEventListener("click", ()=>teachModel());
+assistantInput.addEventListener("keydown", e => { if(e.key==="Enter") teachModel(); });
+
+function teachModel() {
+  const text = assistantInput.value.trim();
+  if(!text) return;
+  addMessage(assistantBox, "Вы (обучение)", text, "user");
+  trainedPhrases.push(text);
+  localStorage.setItem("trainedPhrases", JSON.stringify(trainedPhrases));
+  renderPhrases();
+  assistantInput.value = "";
+  addMessage(assistantBox, "Помощник", "Фраза добавлена для обучения.", "bot");
 }
 
-// Генерация ответа с использованием обученных фраз
+// --- Генерация ответа основной модели ---
 function generateResponse(userText){
   if(trainedPhrases.length>0){
     const count = Math.min(trainedPhrases.length, Math.floor(Math.random()*2)+1);
@@ -132,45 +138,13 @@ function generateResponse(userText){
   return "Интересно...";
 }
 
-// Автономное обучение на текущем разговоре
-function trainOnConversation(userText, botReply){
-  const newPhrases = assistantGenerate(userText, botReply);
-  newPhrases.forEach(phrase => {
-    trainedPhrases.push(phrase);
-  });
-  localStorage.setItem("trainedPhrases", JSON.stringify(trainedPhrases));
-  renderPhrases();
-}
-
-// Автономная генерация новых фраз без участия пользователя
-function autoTrain(){
-  if(chatHistory.length===0) return;
-  // Берем случайное последнее сообщение
-  const last = chatHistory[Math.floor(Math.random()*chatHistory.length)];
-  if(last.sender==="Вы"){
-    const botReply = generateResponse(last.text);
-    trainOnConversation(last.text, botReply);
-    addMessage("Помощник сгенерировал", botReply, "bot");
-    assistantLog.innerText = `Автономное обучение добавило новые фразы`;
-  }
-}
-
-// Генератор новых фраз
-function assistantGenerate(userText, botReply){
-  const templates = [
-    `Если кто-то говорит "${userText}", можно ответить: "${botReply}"`,
-    `"${botReply}" полезно после "${userText}"`,
-    `Запомним: "${botReply}" после "${userText}"`,
-    `"${userText}" важно, поэтому: "${botReply}"`,
-    `Можно сказать: "${botReply}" в ответ на "${userText}"`
-  ];
-  const count = Math.floor(Math.random()*3)+1;
-  const newPhrases = [];
-  for(let i=0;i<count;i++){
-    const idx = Math.floor(Math.random()*templates.length);
-    newPhrases.push(templates[idx]);
-  }
-  return newPhrases;
+// --- Функция добавления сообщений ---
+function addMessage(box, sender, text, className){
+  const div = document.createElement("div");
+  div.className = `message ${className}`;
+  div.innerHTML = `<strong>${sender}:</strong> ${text}`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
 }
 </script>
 </body>
