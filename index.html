@@ -1,59 +1,86 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Offline Image Captioning (Demo)</title>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
-<style>
-  body { font-family: Arial, sans-serif; padding: 20px; }
-  #imgPreview { max-width: 300px; margin-top: 10px; display:block; }
-  #caption { margin-top: 20px; font-size: 1.2em; font-weight: bold; }
-</style>
-</head>
-<body>
+from fastapi import FastAPI, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from transformers import AutoTokenizer, AutoModelForCausalLM, AdamW
+import torch
 
-<h2>Offline Image Captioning (Demo)</h2>
-<input type="file" id="imgInput" accept="image/*">
-<img id="imgPreview" />
-<p id="caption">Описание изображения появится здесь...</p>
+app = FastAPI()
 
-<script>
-const imgInput = document.getElementById('imgInput');
-const imgPreview = document.getElementById('imgPreview');
-const captionEl = document.getElementById('caption');
+# Разрешаем фронтенду подключаться
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-let model;
-
-async function loadModel() {
-  model = await mobilenet.load();
-  console.log('MobileNet загружен');
+# Модели
+models = {
+    "gpt2": AutoModelForCausalLM.from_pretrained("gpt2"),
+    "distilgpt2": AutoModelForCausalLM.from_pretrained("distilgpt2")
+}
+tokenizers = {
+    "gpt2": AutoTokenizer.from_pretrained("gpt2"),
+    "distilgpt2": AutoTokenizer.from_pretrained("distilgpt2")
 }
 
-imgInput.addEventListener('change', async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
+current_model = "gpt2"
+training_enabled = False
 
-  imgPreview.src = URL.createObjectURL(file);
-  await imgPreview.decode();
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+models[current_model].to(device)
 
-  // Получаем предсказание
-  const predictions = await model.classify(imgPreview);
+class Message(BaseModel):
+    text: str
 
-  // Берем топ-1 и делаем русский шаблон
-  if(predictions.length > 0){
-    const className = predictions[0].className;
-    const probability = Math.round(predictions[0].probability * 100);
-    captionEl.innerText = `На изображении похоже на "${className}" с вероятностью ${probability}%`;
-  } else {
-    captionEl.innerText = 'Не удалось определить объект на изображении.';
-  }
-});
+@app.post("/chat")
+async def chat(message: Message):
+    tokenizer = tokenizers[current_model]
+    model = models[current_model]
+    model.eval()
+    inputs = tokenizer(message.text, return_tensors="pt").to(device)
+    outputs = model.generate(**inputs, max_new_tokens=100)
+    reply = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    return {"reply": reply}
 
-// Загружаем модель при старте
-loadModel();
-</script>
+@app.post("/train")
+async def train(file: UploadFile):
+    global training_enabled
+    if not training_enabled:
+        return {"status": "Обучение выключено"}
+    
+    data = await file.read()
+    text = data.decode("utf-8")
+    
+    tokenizer = tokenizers[current_model]
+    model = models[current_model]
+    model.train()
+    
+    inputs = tokenizer(text, return_tensors="pt").to(device)
+    labels = inputs.input_ids.clone()
+    
+    optimizer = AdamW(model.parameters(), lr=1e-5)
+    
+    # Один шаг обучения для демонстрации
+    optimizer.zero_grad()
+    outputs = model(**inputs, labels=labels)
+    loss = outputs.loss
+    loss.backward()
+    optimizer.step()
+    
+    return {"status": f"Модель обучена на новых данных, loss={loss.item():.4f}"}
 
-</body>
-</html>
+@app.post("/toggle_training")
+async def toggle_training():
+    global training_enabled
+    training_enabled = not training_enabled
+    return {"training_enabled": training_enabled}
+
+@app.post("/switch_model")
+async def switch_model(model_name: str):
+    global current_model
+    if model_name not in models:
+        return {"status": "Модель не найдена"}
+    current_model = model_name
+    models[current_model].to(device)
+    return {"status": f"Используется модель {current_model}"}
