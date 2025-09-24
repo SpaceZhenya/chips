@@ -1,97 +1,27 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<title>Мини-GPT офлайн 1000 слов</title>
-<style>
-body{font-family:sans-serif;max-width:900px;margin:auto;padding:20px;}
-#chat{border:1px solid #ccc;height:500px;overflow-y:auto;padding:10px;}
-.user{color:blue;} .bot{color:green;}
-</style>
-</head>
-<body>
-<h1>Мини-GPT офлайн с осмысленным словарём</h1>
-<div id="chat"></div>
-<input id="input" placeholder="Напиши что-нибудь..." style="width:70%">
-<button onclick="send()">Отправить</button>
+<input type="file" id="imgInput"/>
+<p id="caption"></p>
 
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
 <script>
-// ===== Словарь ~1000 осмысленных слов =====
-const vocab = [
-"привет","как","дела","пока","все","супер","интересно","расскажи","больше","я","тебя","слушаю",
-"что","нового","хорошо","отлично","погода","идеи","информация","да","нет","может","возможно",
-"ты","он","она","мы","вы","они","понятно","согласен","сейчас","тоже","вчера","сегодня","завтра",
-"работа","дом","школа","учёба","еда","кофе","чай","машина","город","улица","время","друзья",
-"семья","вечер","утро","день","ночь","программа","игра","музыка","кино","сериал","книга","спорт",
-"футбол","баскетбол","теннис","плавание","поездка","отпуск","путешествие","солнце","дождь","ветер",
-"снег","тепло","холод","внимание","техника","компьютер","телефон","интернет","соцсети","новости",
-"история","мир","страна","квартира","велосипед","мотоцикл","поезд","самолёт","корабль","река",
-"озеро","море","океан","гора","лес","парк","сад","цветок","животное","собака","кошка","птица",
-"рыба","насекомое","фрукты","овощи","мясо","хлеб","вода","сок","молоко","сыр","яйцо","суп","салат",
-// далее добавляем похожие слова, фразы, действия, эмоции и т.д., чтобы общий словарь был ~1000 слов
-// для компактности примера здесь массив укорочен
-];
+  const imgInput = document.getElementById('imgInput');
+  const captionEl = document.getElementById('caption');
 
-// ===== Веса сети (3 скрытых слоя, встроенные) =====
-function randomWeights(rows,cols){return Array.from({length:rows},()=>Array.from({length:cols},()=>Math.random()*0.2-0.1));}
-const weights1 = randomWeights(vocab.length,vocab.length);
-const weights2 = randomWeights(vocab.length,vocab.length);
-const weights3 = randomWeights(vocab.length,vocab.length);
+  imgInput.addEventListener('change', async (event) => {
+    const file = event.target.files[0];
+    const img = new Image();
+    img.src = URL.createObjectURL(file);
+    await img.decode();
 
-// ===== Функции сети =====
-function oneHot(word){
-  let vec = Array(vocab.length).fill(0);
-  let idx = vocab.indexOf(word.toLowerCase());
-  if(idx>=0) vec[idx]=1;
-  return vec;
-}
-function relu(vec){return vec.map(x=>Math.max(0,x));}
-function matMul(a,b){
-  let m=a.length,n=a[0].length,p=b[0].length;
-  let res=Array(m).fill(0).map(()=>Array(p).fill(0));
-  for(let i=0;i<m;i++)for(let j=0;j<p;j++)for(let k=0;k<n;k++)res[i][j]+=a[i][k]*b[k][j];
-  return res;
-}
-function softmax(vec){let max=Math.max(...vec);let exps=vec.map(x=>Math.exp(x-max));let sum=exps.reduce((a,b)=>a+b,0);return exps.map(x=>x/sum);}
-function sample(prob){let r=Math.random(),acc=0;for(let i=0;i<prob.length;i++){acc+=prob[i];if(r<=acc)return i;}return prob.length-1;}
+    // Загружаем предобученный энкодер (MobileNet)
+    const model = await tf.loadGraphModel('https://tfhub.dev/google/tfjs-model/imagenet/mobilenet_v2_140_224/classification/3/default/1', {fromTFHub:true});
+    
+    const tensor = tf.browser.fromPixels(img).resizeBilinear([224,224]).expandDims().div(255);
+    const features = model.predict(tensor); // feature vector
 
-// ===== Генерация текста с контекстом последних 5 слов =====
-function predict(context){
-  let word = context[context.length-1];
-  let x = [oneHot(word)];
-  let h1 = relu(matMul(x,weights1));
-  let h2 = relu(matMul(h1,weights2));
-  let h3 = relu(matMul(h2,weights3));
-  let probs = softmax(h3[0]);
-  let nextIdx = sample(probs);
-  return vocab[nextIdx];
-}
-
-function generate(inputWords,length=12){
-  let context = inputWords.slice(-5); // последние 5 слов
-  let output = [];
-  for(let i=0;i<length;i++){
-    let next = predict(context);
-    output.push(next);
-    context.push(next);
-    if(context.length>5) context.shift();
-  }
-  return output.join(" ");
-}
-
-// ===== Чат =====
-function send(){
-  const input=document.getElementById("input");
-  const chat=document.getElementById("chat");
-  let msg=input.value.trim();
-  if(!msg)return;
-  chat.innerHTML+=`<div class="user"><b>Ты:</b> ${msg}</div>`;
-  let words=msg.split(" ");
-  let answer=generate(words,10);
-  chat.innerHTML+=`<div class="bot"><b>ИИ:</b> ${answer}</div>`;
-  input.value="";
-  chat.scrollTop=chat.scrollHeight;
-}
+    // Здесь подключаем tiny GPT/LLM (например, llama.js) для генерации текста
+    // pseudo-code:
+    // const caption = await tinyGPT.generate(features);
+    
+    captionEl.innerText = "Описание изображения: " + "Здесь будет текст от LLM";
+  });
 </script>
-</body>
-</html>
