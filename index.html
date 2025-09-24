@@ -3,43 +3,67 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3D Вождение машины</title>
+<title>3D Мини-Гонка</title>
 <style>
   body { margin: 0; overflow: hidden; background-color: #87ceeb; }
 </style>
 </head>
 <body>
 <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.157.0/examples/js/controls/OrbitControls.js"></script>
 
 <script>
 // Сцена, камера, рендер
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({antialias: true});
+const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 // Свет
-const light = new THREE.DirectionalLight(0xffffff, 1);
+const light = new THREE.DirectionalLight(0xffffff,1);
 light.position.set(5,10,5);
 scene.add(light);
 
-// Дорога
-const roadGeometry = new THREE.PlaneGeometry(50, 500);
-const roadMaterial = new THREE.MeshPhongMaterial({color: 0x333333});
-const road = new THREE.Mesh(roadGeometry, roadMaterial);
-road.rotation.x = -Math.PI/2;
-scene.add(road);
+// Дорога (с поворотами)
+const roadSegments = [];
+function createRoadSegment(x,z,angle=0){
+    const geometry = new THREE.PlaneGeometry(10,50);
+    const material = new THREE.MeshPhongMaterial({color:0x333333});
+    const road = new THREE.Mesh(geometry,material);
+    road.rotation.x = -Math.PI/2;
+    road.rotation.y = angle;
+    road.position.set(x,0.01,z);
+    scene.add(road);
+    roadSegments.push(road);
+}
+createRoadSegment(0,0);
+createRoadSegment(5,-50, Math.PI/12);
+createRoadSegment(15,-100, -Math.PI/18);
+createRoadSegment(20,-150, Math.PI/12);
 
-// Машина (простая коробка)
-const carGeometry = new THREE.BoxGeometry(2, 1, 4);
-const carMaterial = new THREE.MeshPhongMaterial({color: 0xff0000});
-const car = new THREE.Mesh(carGeometry, carMaterial);
+// Дома по бокам
+function createHouse(x,z){
+    const geometry = new THREE.BoxGeometry(5,10,5);
+    const material = new THREE.MeshPhongMaterial({color:0x8B4513});
+    const house = new THREE.Mesh(geometry,material);
+    house.position.set(x,5,z);
+    scene.add(house);
+}
+
+// Размещаем дома вдоль дороги
+for(let i=0;i<200;i+=20){
+    createHouse(-12,-i);
+    createHouse(12,-i-10);
+}
+
+// Машина
+const carGeometry = new THREE.BoxGeometry(2,1,4);
+const carMaterial = new THREE.MeshPhongMaterial({color:0xff0000});
+const car = new THREE.Mesh(carGeometry,carMaterial);
 car.position.y = 0.5;
 scene.add(car);
 
-// Камера за машиной
+// Камера
 camera.position.set(0,5,10);
 camera.lookAt(car.position);
 
@@ -47,46 +71,41 @@ camera.lookAt(car.position);
 let speed = 0;
 let direction = 0;
 const maxSpeed = 0.5;
-
 document.addEventListener('keydown', (e)=>{
-  if(e.key === "ArrowUp") speed = maxSpeed;
-  if(e.key === "ArrowDown") speed = -maxSpeed;
-  if(e.key === "ArrowLeft") direction = 0.05;
-  if(e.key === "ArrowRight") direction = -0.05;
+    if(e.key === "ArrowUp") speed = maxSpeed;
+    if(e.key === "ArrowDown") speed = -maxSpeed;
+    if(e.key === "ArrowLeft") direction = 0.05;
+    if(e.key === "ArrowRight") direction = -0.05;
 });
-
 document.addEventListener('keyup', (e)=>{
-  if(e.key === "ArrowUp" || e.key === "ArrowDown") speed = 0;
-  if(e.key === "ArrowLeft" || e.key === "ArrowRight") direction = 0;
+    if(e.key==="ArrowUp" || e.key==="ArrowDown") speed=0;
+    if(e.key==="ArrowLeft" || e.key==="ArrowRight") direction=0;
 });
 
 // Анимация
 function animate(){
-  requestAnimationFrame(animate);
+    requestAnimationFrame(animate);
 
-  // Поворот и движение
-  car.rotation.y += direction;
-  car.position.x -= Math.sin(car.rotation.y) * speed;
-  car.position.z -= Math.cos(car.rotation.y) * speed;
+    car.rotation.y += direction;
+    car.position.x -= Math.sin(car.rotation.y)*speed;
+    car.position.z -= Math.cos(car.rotation.y)*speed;
 
-  // Камера следует за машиной
-  camera.position.x = car.position.x - Math.sin(car.rotation.y) * 10;
-  camera.position.z = car.position.z - Math.cos(car.rotation.y) * 10;
-  camera.position.y = car.position.y + 5;
-  camera.lookAt(car.position);
+    camera.position.x = car.position.x - Math.sin(car.rotation.y)*10;
+    camera.position.z = car.position.z - Math.cos(car.rotation.y)*10;
+    camera.position.y = car.position.y + 5;
+    camera.lookAt(car.position);
 
-  renderer.render(scene, camera);
+    renderer.render(scene,camera);
 }
 
 animate();
 
-// Подстройка при изменении размера окна
-window.addEventListener('resize', ()=>{
-  camera.aspect = window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+// Подстройка окна
+window.addEventListener('resize',()=>{
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
 });
 </script>
-
 </body>
 </html>
