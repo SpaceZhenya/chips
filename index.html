@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>ИИ Чат с помощником</title>
+  <title>Автономный ИИ Чат</title>
   <style>
     body { font-family: Arial, sans-serif; background: #f0f0f0; }
     .container { max-width: 500px; margin: 50px auto; padding: 20px; background: white; border-radius: 10px; }
@@ -12,19 +12,15 @@
     .message { margin-bottom: 10px; }
     .user { font-weight: bold; }
     .bot { color: #007bff; }
-    .train-box { margin-bottom: 10px; }
-    .train-box input { width: calc(100% - 100px); padding: 5px; margin-right: 5px; }
-    .train-box button { padding: 5px; width: 80px; }
     #trainingToggle { margin-bottom: 10px; }
     .assistant-log { font-size: 0.9em; color: #555; margin-bottom: 10px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>ИИ Чат с помощником</h1>
+    <h1>Автономный ИИ Чат</h1>
 
     <button id="trainingToggle">Включить обучение</button>
-
     <div class="assistant-log" id="assistantLog">Помощник: обучение выключено</div>
 
     <div class="chat-box" id="chatBox"></div>
@@ -44,17 +40,17 @@
     let chatHistory = JSON.parse(localStorage.getItem("chatHistory")) || [];
     let trainedPhrases = JSON.parse(localStorage.getItem("trainedPhrases")) || [];
 
-    // Показываем историю чата
+    // Показать историю
     chatHistory.forEach(msg => addMessage(msg.sender, msg.text, msg.className));
-
-    sendBtn.addEventListener("click", sendMessage);
-    input.addEventListener("keydown", e => { if (e.key === "Enter") sendMessage(); });
 
     trainingToggle.addEventListener("click", () => {
       trainingEnabled = !trainingEnabled;
       trainingToggle.innerText = trainingEnabled ? "Выключить обучение" : "Включить обучение";
       assistantLog.innerText = trainingEnabled ? "Помощник: обучение включено" : "Помощник: обучение выключено";
     });
+
+    sendBtn.addEventListener("click", sendMessage);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") sendMessage(); });
 
     function sendMessage() {
       const text = input.value.trim();
@@ -64,19 +60,22 @@
       localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
       input.value = "";
 
-      // Помощник генерирует новые обучающие фразы, если обучение включено
-      if (trainingEnabled) {
-        const newPhrase = assistantGenerate(text);
-        trainedPhrases.push(newPhrase);
-        localStorage.setItem("trainedPhrases", JSON.stringify(trainedPhrases));
-        assistantLog.innerText = `Помощник сгенерировал новую фразу: "${newPhrase}"`;
-      }
-
-      // Генерация ответа основной моделью
+      // Основная модель генерирует ответ
       const reply = generateResponse(text);
       addMessage("ИИ", reply, "bot");
       chatHistory.push({ sender: "ИИ", text: reply, className: "bot" });
       localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+
+      // Помощник автоматически придумывает новые фразы
+      if (trainingEnabled) {
+        const newPhrases = assistantGenerate(text, reply);
+        newPhrases.forEach(phrase => {
+          trainedPhrases.push(phrase);
+          addMessage("Помощник сгенерировал", phrase, "bot");
+        });
+        localStorage.setItem("trainedPhrases", JSON.stringify(trainedPhrases));
+        assistantLog.innerText = `Помощник сгенерировал ${newPhrases.length} фразы`;
+      }
     }
 
     function addMessage(sender, text, className) {
@@ -89,33 +88,34 @@
 
     // Основная модель отвечает, используя обученные фразы или ключевые слова
     function generateResponse(userText) {
-      let response = "Я пока не знаю, что ответить.";
-
-      if (trainingEnabled && trainedPhrases.length > 0) {
-        // Используем случайную фразу из обученных
+      if (trainedPhrases.length > 0) {
         const idx = Math.floor(Math.random() * trainedPhrases.length);
-        response = trainedPhrases[idx];
-      } else {
-        const text = userText.toLowerCase();
-        if (text.includes("привет")) response = "Привет! Как дела?";
-        else if (text.includes("как дела")) response = "У меня всё хорошо, спасибо!";
-        else if (text.includes("пока")) response = "До встречи!";
+        return trainedPhrases[idx];
       }
-
-      return response;
+      const text = userText.toLowerCase();
+      if (text.includes("привет")) return "Привет! Как дела?";
+      if (text.includes("как дела")) return "У меня всё хорошо, спасибо!";
+      if (text.includes("пока")) return "До встречи!";
+      return "Интересно...";
     }
 
-    // Помощник генерирует новую обучающую фразу на основе сообщения пользователя
-    function assistantGenerate(userText) {
+    // Помощник сам генерирует новые фразы на основе последнего сообщения
+    function assistantGenerate(userText, botReply) {
       const templates = [
-        `Хороший ответ на: "${userText}"`,
-        `Интересно узнать про: "${userText}"`,
-        `Думаю, что "${userText}" важно`,
-        `"${userText}" может пригодиться в будущем`,
-        `Следует помнить: "${userText}"`
+        `Можно сказать: "${botReply}" после того как кто-то сказал "${userText}"`,
+        `"${userText}" напоминает мне о "${botReply}"`,
+        `Если кто-то говорит "${userText}", можно ответить: "${botReply}"`,
+        `"${botReply}" может быть полезно при обсуждении "${userText}"`,
+        `"${userText}" важно, и поэтому помним: "${botReply}"`
       ];
-      const idx = Math.floor(Math.random() * templates.length);
-      return templates[idx];
+      // Случайное количество новых фраз от 1 до 3
+      const count = Math.floor(Math.random() * 3) + 1;
+      const newPhrases = [];
+      for (let i = 0; i < count; i++) {
+        const idx = Math.floor(Math.random() * templates.length);
+        newPhrases.push(templates[idx]);
+      }
+      return newPhrases;
     }
   </script>
 </body>
