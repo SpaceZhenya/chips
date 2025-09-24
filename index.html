@@ -3,19 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Offline Image Captioning with LLaMA.js</title>
+<title>Offline Image Captioning Demo</title>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-<script src="https://cdn.jsdelivr.net/npm/llama.js/dist/llama.js"></script>
 <style>
   body { font-family: Arial; padding: 20px; }
-  #imgPreview { max-width: 300px; margin-top: 10px; }
+  #imgPreview { max-width: 300px; margin-top: 10px; display:block; }
 </style>
 </head>
 <body>
 
-<h2>Offline Image Captioning with LLaMA.js</h2>
+<h2>Offline Image Captioning Demo</h2>
 <input type="file" id="imgInput" accept="image/*">
-<br>
 <img id="imgPreview" />
 <p id="caption">Описание изображения появится здесь...</p>
 
@@ -23,21 +21,16 @@
 const imgInput = document.getElementById('imgInput');
 const imgPreview = document.getElementById('imgPreview');
 const captionEl = document.getElementById('caption');
+
 let model;
 
-// Загружаем MobileNet (TF.js) и LLaMA.js модель
-async function loadModels() {
-  // MobileNet энкодер
+// Загружаем MobileNet при старте
+async function loadModel() {
   model = await tf.loadGraphModel(
     'https://tfhub.dev/google/tfjs-model/imagenet/mobilenet_v2_140_224/classification/3/default/1',
     {fromTFHub:true}
   );
   console.log('Энкодер загружен');
-
-  // LLaMA.js (tiny LLaMA)
-  window.llm = new LLaMA();
-  await llm.init({ modelUrl: 'path/to/llama-124M/ggml-model-q4_0.bin' }); // локальный путь
-  console.log('LLM загружена');
 }
 
 imgInput.addEventListener('change', async (event) => {
@@ -47,25 +40,25 @@ imgInput.addEventListener('change', async (event) => {
   imgPreview.src = URL.createObjectURL(file);
   await imgPreview.decode();
 
-  // Feature vector через MobileNet
+  // Преобразуем изображение в тензор
   const tensor = tf.browser.fromPixels(imgPreview)
                   .resizeBilinear([224,224])
                   .expandDims()
                   .div(255);
 
-  const features = model.predict(tensor);
-  const featureArray = await features.data();
-  const featureStr = featureArray.slice(0,20).join(','); // первые 20 элементов для prompt
+  // Получаем предсказания
+  const predictions = model.predict(tensor);
+  const data = await predictions.data();
 
-  // Генерируем текст через LLaMA.js
-  const prompt = `Опиши изображение по этим признакам: [${featureStr}]`;
-  const output = await llm.generate(prompt, { max_new_tokens: 50 });
-  
-  captionEl.innerText = output;
+  // Находим индекс максимального значения
+  const maxIdx = data.indexOf(Math.max(...data));
+
+  // Простая заглушка: описание по классу
+  captionEl.innerText = `Это изображение класса №${maxIdx} (демо)`;
 });
 
-// Загружаем модели при старте
-loadModels();
+// Загружаем модель при старте
+loadModel();
 </script>
 
 </body>
