@@ -2,11 +2,10 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Локальный ИИ Чат</title>
+  <title>ИИ Чат с помощником</title>
   <style>
     body { font-family: Arial, sans-serif; background: #f0f0f0; }
     .container { max-width: 500px; margin: 50px auto; padding: 20px; background: white; border-radius: 10px; }
-    .controls { margin-bottom: 10px; }
     .chat-box { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; background: #fafafa; }
     input { width: calc(100% - 100px); padding: 10px; margin-right: 5px; }
     button { padding: 10px; width: 80px; margin-bottom: 5px; }
@@ -16,18 +15,17 @@
     .train-box { margin-bottom: 10px; }
     .train-box input { width: calc(100% - 100px); padding: 5px; margin-right: 5px; }
     .train-box button { padding: 5px; width: 80px; }
+    #trainingToggle { margin-bottom: 10px; }
+    .assistant-log { font-size: 0.9em; color: #555; margin-bottom: 10px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Локальный ИИ Чат</h1>
+    <h1>ИИ Чат с помощником</h1>
 
     <button id="trainingToggle">Включить обучение</button>
 
-    <div class="train-box">
-      <input type="text" id="trainInput" placeholder="Введите фразу для обучения" />
-      <button id="trainBtn">Добавить фразу</button>
-    </div>
+    <div class="assistant-log" id="assistantLog">Помощник: обучение выключено</div>
 
     <div class="chat-box" id="chatBox"></div>
 
@@ -40,19 +38,23 @@
     const input = document.getElementById("userInput");
     const sendBtn = document.getElementById("sendBtn");
     const trainingToggle = document.getElementById("trainingToggle");
-    const trainInput = document.getElementById("trainInput");
-    const trainBtn = document.getElementById("trainBtn");
+    const assistantLog = document.getElementById("assistantLog");
 
     let trainingEnabled = false;
     let chatHistory = JSON.parse(localStorage.getItem("chatHistory")) || [];
     let trainedPhrases = JSON.parse(localStorage.getItem("trainedPhrases")) || [];
 
-    // Показать историю
+    // Показываем историю чата
     chatHistory.forEach(msg => addMessage(msg.sender, msg.text, msg.className));
 
-    // Отправка сообщений
     sendBtn.addEventListener("click", sendMessage);
     input.addEventListener("keydown", e => { if (e.key === "Enter") sendMessage(); });
+
+    trainingToggle.addEventListener("click", () => {
+      trainingEnabled = !trainingEnabled;
+      trainingToggle.innerText = trainingEnabled ? "Выключить обучение" : "Включить обучение";
+      assistantLog.innerText = trainingEnabled ? "Помощник: обучение включено" : "Помощник: обучение выключено";
+    });
 
     function sendMessage() {
       const text = input.value.trim();
@@ -62,7 +64,15 @@
       localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
       input.value = "";
 
-      // Генерация ответа локально
+      // Помощник генерирует новые обучающие фразы, если обучение включено
+      if (trainingEnabled) {
+        const newPhrase = assistantGenerate(text);
+        trainedPhrases.push(newPhrase);
+        localStorage.setItem("trainedPhrases", JSON.stringify(trainedPhrases));
+        assistantLog.innerText = `Помощник сгенерировал новую фразу: "${newPhrase}"`;
+      }
+
+      // Генерация ответа основной моделью
       const reply = generateResponse(text);
       addMessage("ИИ", reply, "bot");
       chatHistory.push({ sender: "ИИ", text: reply, className: "bot" });
@@ -77,38 +87,35 @@
       chatBox.scrollTop = chatBox.scrollHeight;
     }
 
-    // Включение/выключение обучения
-    trainingToggle.addEventListener("click", () => {
-      trainingEnabled = !trainingEnabled;
-      trainingToggle.innerText = trainingEnabled ? "Выключить обучение" : "Включить обучение";
-    });
-
-    // Добавление обучающих фраз
-    trainBtn.addEventListener("click", () => {
-      const phrase = trainInput.value.trim();
-      if (!phrase) return;
-      trainedPhrases.push(phrase);
-      localStorage.setItem("trainedPhrases", JSON.stringify(trainedPhrases));
-      trainInput.value = "";
-      alert("Фраза добавлена для обучения!");
-    });
-
-    // Простая генерация ответа
+    // Основная модель отвечает, используя обученные фразы или ключевые слова
     function generateResponse(userText) {
       let response = "Я пока не знаю, что ответить.";
 
-      // Если обучение включено, используем обученные фразы
       if (trainingEnabled && trainedPhrases.length > 0) {
-        const randomIndex = Math.floor(Math.random() * trainedPhrases.length);
-        response = trainedPhrases[randomIndex];
+        // Используем случайную фразу из обученных
+        const idx = Math.floor(Math.random() * trainedPhrases.length);
+        response = trainedPhrases[idx];
       } else {
-        // Эмуляция ответа на основе ключевых слов
-        if (userText.toLowerCase().includes("привет")) response = "Привет! Как дела?";
-        else if (userText.toLowerCase().includes("как дела")) response = "У меня всё хорошо, спасибо!";
-        else if (userText.toLowerCase().includes("пока")) response = "До встречи!";
+        const text = userText.toLowerCase();
+        if (text.includes("привет")) response = "Привет! Как дела?";
+        else if (text.includes("как дела")) response = "У меня всё хорошо, спасибо!";
+        else if (text.includes("пока")) response = "До встречи!";
       }
 
       return response;
+    }
+
+    // Помощник генерирует новую обучающую фразу на основе сообщения пользователя
+    function assistantGenerate(userText) {
+      const templates = [
+        `Хороший ответ на: "${userText}"`,
+        `Интересно узнать про: "${userText}"`,
+        `Думаю, что "${userText}" важно`,
+        `"${userText}" может пригодиться в будущем`,
+        `Следует помнить: "${userText}"`
+      ];
+      const idx = Math.floor(Math.random() * templates.length);
+      return templates[idx];
     }
   </script>
 </body>
