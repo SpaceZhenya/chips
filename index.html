@@ -2,132 +2,91 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>AR Mood Booster VR</title>
-<script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.9.1/dist/face-api.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tone@14.8.39/build/Tone.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Вождение машины</title>
 <style>
-  body { display: flex; flex-direction: column; align-items: center; font-family: sans-serif; background: #f0f0f0; }
-  video { border: 2px solid #333; border-radius: 10px; }
-  canvas { position: absolute; top: 0; left: 0; }
-  #container { position: relative; display: inline-block; }
+  body { margin: 0; overflow: hidden; background-color: #87ceeb; }
 </style>
 </head>
 <body>
-
-<h1>AR Mood Booster VR</h1>
-<div id="container">
-  <video id="video" width="640" height="480" autoplay muted></video>
-  <canvas id="overlay" width="640" height="480"></canvas>
-</div>
-<p id="mood">Определяем настроение...</p>
+<script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.157.0/examples/js/controls/OrbitControls.js"></script>
 
 <script>
-const video = document.getElementById('video');
-const canvas = document.getElementById('overlay');
-const moodText = document.getElementById('mood');
-const ctx = canvas.getContext('2d');
+// Сцена, камера, рендер
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({antialias: true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
-// Конфетти для радости
-let confetti = [];
-function spawnConfetti(x, y) {
-  for (let i = 0; i < 30; i++) {
-    confetti.push({x: x, y: y, vx: Math.random()*4-2, vy: Math.random()*-4-1, color: `hsl(${Math.random()*360},100%,50%)`});
-  }
-}
-function drawConfetti() {
-  for (let i = confetti.length - 1; i >= 0; i--) {
-    const c = confetti[i];
-    ctx.fillStyle = c.color;
-    ctx.fillRect(c.x, c.y, 5, 5);
-    c.x += c.vx;
-    c.y += c.vy;
-    c.vy += 0.1; // гравитация
-    if(c.y > canvas.height) confetti.splice(i,1);
-  }
-}
+// Свет
+const light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(5,10,5);
+scene.add(light);
 
-// AR фильтры
-function drawAR(box, mood) {
-  ctx.save();
-  if(mood === "happy") {
-    // Радостные солнечные очки
-    ctx.strokeStyle = "yellow";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(box.x + box.width*0.3, box.y + box.height*0.4, box.width*0.15, 0, 2*Math.PI);
-    ctx.arc(box.x + box.width*0.7, box.y + box.height*0.4, box.width*0.15, 0, 2*Math.PI);
-    ctx.stroke();
-    spawnConfetti(box.x + box.width/2, box.y + box.height/2);
-  } else if(mood === "sad") {
-    // Слеза под глазом
-    ctx.fillStyle = "blue";
-    ctx.beginPath();
-    ctx.ellipse(box.x + box.width*0.5, box.y + box.height*0.7, 10, 20, 0, 0, 2*Math.PI);
-    ctx.fill();
-  } else if(mood === "angry") {
-    // Злые брови
-    ctx.strokeStyle = "red";
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.moveTo(box.x + box.width*0.2, box.y + box.height*0.3);
-    ctx.lineTo(box.x + box.width*0.4, box.y + box.height*0.25);
-    ctx.moveTo(box.x + box.width*0.6, box.y + box.height*0.25);
-    ctx.lineTo(box.x + box.width*0.8, box.y + box.height*0.3);
-    ctx.stroke();
-  } else if(mood === "surprised") {
-    // Большой рот
-    ctx.strokeStyle = "orange";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(box.x + box.width*0.5, box.y + box.height*0.65, box.width*0.15, 0, Math.PI*2);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
+// Дорога
+const roadGeometry = new THREE.PlaneGeometry(50, 500);
+const roadMaterial = new THREE.MeshPhongMaterial({color: 0x333333});
+const road = new THREE.Mesh(roadGeometry, roadMaterial);
+road.rotation.x = -Math.PI/2;
+scene.add(road);
 
-// Камера
-navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
-  video.srcObject = stream;
+// Машина (простая коробка)
+const carGeometry = new THREE.BoxGeometry(2, 1, 4);
+const carMaterial = new THREE.MeshPhongMaterial({color: 0xff0000});
+const car = new THREE.Mesh(carGeometry, carMaterial);
+car.position.y = 0.5;
+scene.add(car);
+
+// Камера за машиной
+camera.position.set(0,5,10);
+camera.lookAt(car.position);
+
+// Управление
+let speed = 0;
+let direction = 0;
+const maxSpeed = 0.5;
+
+document.addEventListener('keydown', (e)=>{
+  if(e.key === "ArrowUp") speed = maxSpeed;
+  if(e.key === "ArrowDown") speed = -maxSpeed;
+  if(e.key === "ArrowLeft") direction = 0.05;
+  if(e.key === "ArrowRight") direction = -0.05;
 });
 
-// Модели face-api
-Promise.all([
-  faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.9.1/model/'),
-  faceapi.nets.faceExpressionNet.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.9.1/model/')
-]).then(startDetection);
+document.addEventListener('keyup', (e)=>{
+  if(e.key === "ArrowUp" || e.key === "ArrowDown") speed = 0;
+  if(e.key === "ArrowLeft" || e.key === "ArrowRight") direction = 0;
+});
 
-// Музыка
-const happySynth = new Tone.Synth().toDestination();
-const sadSynth = new Tone.Synth().toDestination();
-function playMoodSound(mood) {
-  if(mood === 'happy') happySynth.triggerAttackRelease("C5", "8n");
-  if(mood === 'sad') sadSynth.triggerAttackRelease("A3", "8n");
+// Анимация
+function animate(){
+  requestAnimationFrame(animate);
+
+  // Поворот и движение
+  car.rotation.y += direction;
+  car.position.x -= Math.sin(car.rotation.y) * speed;
+  car.position.z -= Math.cos(car.rotation.y) * speed;
+
+  // Камера следует за машиной
+  camera.position.x = car.position.x - Math.sin(car.rotation.y) * 10;
+  camera.position.z = car.position.z - Math.cos(car.rotation.y) * 10;
+  camera.position.y = car.position.y + 5;
+  camera.lookAt(car.position);
+
+  renderer.render(scene, camera);
 }
 
-function startDetection() {
-  video.addEventListener('play', () => {
-    const displaySize = { width: video.width, height: video.height };
-    faceapi.matchDimensions(canvas, displaySize);
+animate();
 
-    setInterval(async () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawConfetti();
-
-      const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
-      if (detections.length > 0) {
-        const resized = faceapi.resizeResults(detections, displaySize);
-        const expr = resized[0].expressions;
-        const maxMood = Object.keys(expr).reduce((a, b) => expr[a] > expr[b] ? a : b);
-        moodText.innerText = `Настроение: ${maxMood}`;
-
-        drawAR(resized[0].detection.box, maxMood);
-        playMoodSound(maxMood);
-      } else {
-        moodText.innerText = "Лицо не найдено";
-      }
-    }, 200);
-  });
-}
+// Подстройка при изменении размера окна
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
 </script>
+
 </body>
 </html>
