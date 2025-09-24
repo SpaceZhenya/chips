@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Автономный ИИ Чат на вебе</title>
+<title>Автономный ИИ, который обучается сам</title>
 <style>
 body { font-family: Arial; background: #f0f0f0; }
 .container { max-width: 600px; margin: 50px auto; padding: 20px; background: #fff; border-radius: 10px; }
@@ -20,10 +20,10 @@ button { padding: 10px; width: 100px; margin-bottom: 5px; }
 </head>
 <body>
 <div class="container">
-<h1>Автономный ИИ Чат</h1>
+<h1>Автономный ИИ с самостоят. обучением</h1>
 
 <button id="trainingToggle">Включить обучение</button>
-<div class="assistant-log" id="assistantLog">Помощник: обучение выключено</div>
+<div class="assistant-log" id="assistantLog">Обучение выключено</div>
 
 <div class="chat-box" id="chatBox"></div>
 
@@ -63,20 +63,32 @@ function removePhrase(idx) {
   renderPhrases();
 }
 
-// Показ истории чата
+// Показ истории
 chatHistory.forEach(msg => addMessage(msg.sender, msg.text, msg.className));
 renderPhrases();
 
 trainingToggle.addEventListener("click", () => {
   trainingEnabled = !trainingEnabled;
   trainingToggle.innerText = trainingEnabled ? "Выключить обучение" : "Включить обучение";
-  assistantLog.innerText = trainingEnabled ? "Помощник: обучение включено" : "Помощник: обучение выключено";
+  assistantLog.innerText = trainingEnabled ? "Обучение включено" : "Обучение выключено";
+
+  // Если включили обучение — запускаем автоматический генератор фраз каждые 10 секунд
+  if(trainingEnabled){
+    if(!window.autoTrainInterval){
+      window.autoTrainInterval = setInterval(() => {
+        autoTrain();
+      }, 10000);
+    }
+  } else {
+    clearInterval(window.autoTrainInterval);
+    window.autoTrainInterval = null;
+  }
 });
 
 sendBtn.addEventListener("click", sendMessage);
 input.addEventListener("keydown", e => { if(e.key==="Enter") sendMessage(); });
 
-function sendMessage() {
+function sendMessage(){
   const text = input.value.trim();
   if(!text) return;
   addMessage("Вы", text, "user");
@@ -84,22 +96,13 @@ function sendMessage() {
   localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
   input.value="";
 
-  // Основная модель отвечает
   const reply = generateResponse(text);
   addMessage("ИИ", reply, "bot");
   chatHistory.push({sender:"ИИ", text:reply, className:"bot"});
   localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
 
-  // Помощник генерирует новые фразы
   if(trainingEnabled){
-    const newPhrases = assistantGenerate(text, reply);
-    newPhrases.forEach(phrase => {
-      trainedPhrases.push(phrase);
-      addMessage("Помощник сгенерировал", phrase, "bot");
-    });
-    localStorage.setItem("trainedPhrases", JSON.stringify(trainedPhrases));
-    assistantLog.innerText = `Помощник сгенерировал ${newPhrases.length} фраз`;
-    renderPhrases();
+    trainOnConversation(text, reply);
   }
 }
 
@@ -111,6 +114,7 @@ function addMessage(sender, text, className){
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
+// Генерация ответа с использованием обученных фраз
 function generateResponse(userText){
   if(trainedPhrases.length>0){
     const count = Math.min(trainedPhrases.length, Math.floor(Math.random()*2)+1);
@@ -128,7 +132,30 @@ function generateResponse(userText){
   return "Интересно...";
 }
 
-// Помощник генерирует новые фразы автоматически
+// Автономное обучение на текущем разговоре
+function trainOnConversation(userText, botReply){
+  const newPhrases = assistantGenerate(userText, botReply);
+  newPhrases.forEach(phrase => {
+    trainedPhrases.push(phrase);
+  });
+  localStorage.setItem("trainedPhrases", JSON.stringify(trainedPhrases));
+  renderPhrases();
+}
+
+// Автономная генерация новых фраз без участия пользователя
+function autoTrain(){
+  if(chatHistory.length===0) return;
+  // Берем случайное последнее сообщение
+  const last = chatHistory[Math.floor(Math.random()*chatHistory.length)];
+  if(last.sender==="Вы"){
+    const botReply = generateResponse(last.text);
+    trainOnConversation(last.text, botReply);
+    addMessage("Помощник сгенерировал", botReply, "bot");
+    assistantLog.innerText = `Автономное обучение добавило новые фразы`;
+  }
+}
+
+// Генератор новых фраз
 function assistantGenerate(userText, botReply){
   const templates = [
     `Если кто-то говорит "${userText}", можно ответить: "${botReply}"`,
