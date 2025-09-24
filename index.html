@@ -1,86 +1,115 @@
-from fastapi import FastAPI, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from transformers import AutoTokenizer, AutoModelForCausalLM, AdamW
-import torch
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Локальный ИИ Чат</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f0f0f0; }
+    .container { max-width: 500px; margin: 50px auto; padding: 20px; background: white; border-radius: 10px; }
+    .controls { margin-bottom: 10px; }
+    .chat-box { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; background: #fafafa; }
+    input { width: calc(100% - 100px); padding: 10px; margin-right: 5px; }
+    button { padding: 10px; width: 80px; margin-bottom: 5px; }
+    .message { margin-bottom: 10px; }
+    .user { font-weight: bold; }
+    .bot { color: #007bff; }
+    .train-box { margin-bottom: 10px; }
+    .train-box input { width: calc(100% - 100px); padding: 5px; margin-right: 5px; }
+    .train-box button { padding: 5px; width: 80px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Локальный ИИ Чат</h1>
 
-app = FastAPI()
+    <button id="trainingToggle">Включить обучение</button>
 
-# Разрешаем фронтенду подключаться
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    <div class="train-box">
+      <input type="text" id="trainInput" placeholder="Введите фразу для обучения" />
+      <button id="trainBtn">Добавить фразу</button>
+    </div>
 
-# Модели
-models = {
-    "gpt2": AutoModelForCausalLM.from_pretrained("gpt2"),
-    "distilgpt2": AutoModelForCausalLM.from_pretrained("distilgpt2")
-}
-tokenizers = {
-    "gpt2": AutoTokenizer.from_pretrained("gpt2"),
-    "distilgpt2": AutoTokenizer.from_pretrained("distilgpt2")
-}
+    <div class="chat-box" id="chatBox"></div>
 
-current_model = "gpt2"
-training_enabled = False
+    <input type="text" id="userInput" placeholder="Введите сообщение..." />
+    <button id="sendBtn">Отправить</button>
+  </div>
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-models[current_model].to(device)
+  <script>
+    const chatBox = document.getElementById("chatBox");
+    const input = document.getElementById("userInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const trainingToggle = document.getElementById("trainingToggle");
+    const trainInput = document.getElementById("trainInput");
+    const trainBtn = document.getElementById("trainBtn");
 
-class Message(BaseModel):
-    text: str
+    let trainingEnabled = false;
+    let chatHistory = JSON.parse(localStorage.getItem("chatHistory")) || [];
+    let trainedPhrases = JSON.parse(localStorage.getItem("trainedPhrases")) || [];
 
-@app.post("/chat")
-async def chat(message: Message):
-    tokenizer = tokenizers[current_model]
-    model = models[current_model]
-    model.eval()
-    inputs = tokenizer(message.text, return_tensors="pt").to(device)
-    outputs = model.generate(**inputs, max_new_tokens=100)
-    reply = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    return {"reply": reply}
+    // Показать историю
+    chatHistory.forEach(msg => addMessage(msg.sender, msg.text, msg.className));
 
-@app.post("/train")
-async def train(file: UploadFile):
-    global training_enabled
-    if not training_enabled:
-        return {"status": "Обучение выключено"}
-    
-    data = await file.read()
-    text = data.decode("utf-8")
-    
-    tokenizer = tokenizers[current_model]
-    model = models[current_model]
-    model.train()
-    
-    inputs = tokenizer(text, return_tensors="pt").to(device)
-    labels = inputs.input_ids.clone()
-    
-    optimizer = AdamW(model.parameters(), lr=1e-5)
-    
-    # Один шаг обучения для демонстрации
-    optimizer.zero_grad()
-    outputs = model(**inputs, labels=labels)
-    loss = outputs.loss
-    loss.backward()
-    optimizer.step()
-    
-    return {"status": f"Модель обучена на новых данных, loss={loss.item():.4f}"}
+    // Отправка сообщений
+    sendBtn.addEventListener("click", sendMessage);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") sendMessage(); });
 
-@app.post("/toggle_training")
-async def toggle_training():
-    global training_enabled
-    training_enabled = not training_enabled
-    return {"training_enabled": training_enabled}
+    function sendMessage() {
+      const text = input.value.trim();
+      if (!text) return;
+      addMessage("Вы", text, "user");
+      chatHistory.push({ sender: "Вы", text, className: "user" });
+      localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+      input.value = "";
 
-@app.post("/switch_model")
-async def switch_model(model_name: str):
-    global current_model
-    if model_name not in models:
-        return {"status": "Модель не найдена"}
-    current_model = model_name
-    models[current_model].to(device)
-    return {"status": f"Используется модель {current_model}"}
+      // Генерация ответа локально
+      const reply = generateResponse(text);
+      addMessage("ИИ", reply, "bot");
+      chatHistory.push({ sender: "ИИ", text: reply, className: "bot" });
+      localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+    }
+
+    function addMessage(sender, text, className) {
+      const msgDiv = document.createElement("div");
+      msgDiv.className = `message ${className}`;
+      msgDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
+      chatBox.appendChild(msgDiv);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    // Включение/выключение обучения
+    trainingToggle.addEventListener("click", () => {
+      trainingEnabled = !trainingEnabled;
+      trainingToggle.innerText = trainingEnabled ? "Выключить обучение" : "Включить обучение";
+    });
+
+    // Добавление обучающих фраз
+    trainBtn.addEventListener("click", () => {
+      const phrase = trainInput.value.trim();
+      if (!phrase) return;
+      trainedPhrases.push(phrase);
+      localStorage.setItem("trainedPhrases", JSON.stringify(trainedPhrases));
+      trainInput.value = "";
+      alert("Фраза добавлена для обучения!");
+    });
+
+    // Простая генерация ответа
+    function generateResponse(userText) {
+      let response = "Я пока не знаю, что ответить.";
+
+      // Если обучение включено, используем обученные фразы
+      if (trainingEnabled && trainedPhrases.length > 0) {
+        const randomIndex = Math.floor(Math.random() * trainedPhrases.length);
+        response = trainedPhrases[randomIndex];
+      } else {
+        // Эмуляция ответа на основе ключевых слов
+        if (userText.toLowerCase().includes("привет")) response = "Привет! Как дела?";
+        else if (userText.toLowerCase().includes("как дела")) response = "У меня всё хорошо, спасибо!";
+        else if (userText.toLowerCase().includes("пока")) response = "До встречи!";
+      }
+
+      return response;
+    }
+  </script>
+</body>
+</html>
