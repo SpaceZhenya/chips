@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>3D Город с машинами</title>
+  <title>3D Город со столкновениями</title>
   <style>
     body { margin: 0; overflow: hidden; background: #87ceeb; }
   </style>
@@ -32,10 +32,11 @@
     road.position.set(x, 0, z);
     scene.add(road);
   }
-  makeRoad(20, 400, 0, 0); // главная улица
-  makeRoad(400, 20, 0, -100); // пересекающая улица
+  makeRoad(20, 400, 0, 0); 
+  makeRoad(400, 20, 0, -100); 
 
   // === ДОМА ===
+  const houses = [];
   function makeHouse(x, z) {
     const h = Math.random()*6+6;
     const geom = new THREE.BoxGeometry(8, h, 8);
@@ -43,6 +44,7 @@
     const house = new THREE.Mesh(geom, mat);
     house.position.set(x, h/2, z);
     scene.add(house);
+    houses.push(house);
   }
   for (let z=-200; z<200; z+=40){ makeHouse(-15,z); makeHouse(15,z);}
   for (let x=-200; x<200; x+=40){ makeHouse(x,-85); makeHouse(x,-115);}
@@ -111,14 +113,31 @@
     if(['ArrowLeft','ArrowRight'].includes(e.key)) rotationSpeed=0;
   });
 
+  // === ПРОВЕРКА СТОЛКНОВЕНИЙ ===
+  function checkCollision(obj1, obj2){
+    const box1 = new THREE.Box3().setFromObject(obj1);
+    const box2 = new THREE.Box3().setFromObject(obj2);
+    return box1.intersectsBox(box2);
+  }
+
   // === АНИМАЦИЯ ===
   function animate(){
     requestAnimationFrame(animate);
 
-    // игрок
+    // временно перемещаем игрока
+    const oldPos = player.position.clone();
     player.rotation.y+=rotationSpeed;
     player.position.x+=Math.sin(player.rotation.y)*speed;
     player.position.z+=Math.cos(player.rotation.y)*speed;
+
+    // проверка столкновений (с домами, машинами и полицией)
+    let collided = false;
+    for(let h of houses){ if(checkCollision(player,h)) collided=true; }
+    for(let t of traffic){ if(checkCollision(player,t.obj)) collided=true; }
+    if(checkCollision(player,police)) collided=true;
+
+    // если столкновение — откатываем позицию
+    if(collided){ player.position.copy(oldPos); }
 
     // камера следует
     camera.position.x = player.position.x - Math.sin(player.rotation.y)*10;
@@ -127,7 +146,7 @@
 
     // трафик
     for(let car of traffic){
-      if(green || car.obj.position.z < -102){ // можно ехать или уже на перекрестке
+      if(green || car.obj.position.z < -102){ 
         car.obj.position.z += car.speed;
         if(car.obj.position.z>200) car.obj.position.z=-200;
       }
@@ -138,8 +157,8 @@
     let dz=player.position.z-police.position.z;
     let dist=Math.sqrt(dx*dx+dz*dz);
     if(dist>5){
-      police.position.x+=dx/dist*0.1;
-      police.position.z+=dz/dist*0.1;
+      police.position.x+=dx/dist*0.08;
+      police.position.z+=dz/dist*0.08;
     }
 
     // светофор
