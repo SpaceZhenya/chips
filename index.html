@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>3D Город со столкновениями</title>
+  <title>3D Город с сигналами машин</title>
   <style>
     body { margin: 0; overflow: hidden; background: #87ceeb; }
   </style>
@@ -23,7 +23,7 @@
   light.position.set(20, 30, 20);
   scene.add(light);
 
-  // === ДОРОГА ===
+  // === ДОРОГИ ===
   function makeRoad(width, height, x, z) {
     const geom = new THREE.PlaneGeometry(width, height);
     const mat = new THREE.MeshPhongMaterial({ color: 0x333333 });
@@ -32,8 +32,8 @@
     road.position.set(x, 0, z);
     scene.add(road);
   }
-  makeRoad(20, 400, 0, 0); 
-  makeRoad(400, 20, 0, -100); 
+  makeRoad(20, 400, 0, 0);
+  makeRoad(400, 20, 0, -100);
 
   // === ДОМА ===
   const houses = [];
@@ -49,30 +49,67 @@
   for (let z=-200; z<200; z+=40){ makeHouse(-15,z); makeHouse(15,z);}
   for (let x=-200; x<200; x+=40){ makeHouse(x,-85); makeHouse(x,-115);}
 
-  // === МАШИНА (игрок) ===
+  // === СОЗДАНИЕ МАШИНЫ С ФАРАМИ ===
   function createCar(color=0xff0000){
     const car = new THREE.Group();
     const body = new THREE.Mesh(new THREE.BoxGeometry(2,0.5,4), new THREE.MeshPhongMaterial({ color }));
     body.position.y=0.25; car.add(body);
+
     const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.5,0.5,2), new THREE.MeshPhongMaterial({ color:0x0000ff }));
     cabin.position.set(0,0.75,-0.5); car.add(cabin);
+
+    // колеса
     const wheelGeom=new THREE.CylinderGeometry(0.4,0.4,0.3,16);
     const wheelMat=new THREE.MeshPhongMaterial({ color:0x000000 });
     function addWheel(x,z){let w=new THREE.Mesh(wheelGeom,wheelMat);w.rotation.z=Math.PI/2;w.position.set(x,0.2,z);car.add(w);}
     addWheel(-1,-1.5);addWheel(1,-1.5);addWheel(-1,1.5);addWheel(1,1.5);
+
+    // стоп-сигналы
+    const stopMat = new THREE.MeshPhongMaterial({ color:0x330000, emissive:0x000000 });
+    const stopL = new THREE.Mesh(new THREE.SphereGeometry(0.2,8,8), stopMat.clone());
+    stopL.position.set(-0.6,0.5,2);
+    car.add(stopL);
+    const stopR = stopL.clone();
+    stopR.position.x=0.6;
+    car.add(stopR);
+
+    // поворотники
+    const turnMat = new THREE.MeshPhongMaterial({ color:0x331100, emissive:0x000000 });
+    const turnL = new THREE.Mesh(new THREE.SphereGeometry(0.2,8,8), turnMat.clone());
+    turnL.position.set(-1,0.5,1.8);
+    car.add(turnL);
+    const turnR = turnL.clone();
+    turnR.position.x=1;
+    car.add(turnR);
+
+    car.lights = {stop:[stopL,stopR], turnL, turnR};
     return car;
   }
+
+  // === ИГРОК ===
   const player = createCar(0xff0000);
   player.position.set(0,0.2,0);
   scene.add(player);
 
-  // === ДРУГИЕ МАШИНЫ ===
+  // === ТРАФИК ===
   const traffic = [];
-  for(let i=0;i<5;i++){
+  const waypoints = [
+    new THREE.Vector3(0,0,-180),
+    new THREE.Vector3(100,0,-100),
+    new THREE.Vector3(0,0,100),
+    new THREE.Vector3(-100,0,-100)
+  ];
+
+  for(let i=0;i<4;i++){
     const other = createCar(0x00ff00);
-    other.position.set((Math.random()>0.5?5:-5),0.2,Math.random()*-150);
+    other.position.copy(waypoints[i]);
     scene.add(other);
-    traffic.push({obj:other, speed:0.1+Math.random()*0.2});
+    traffic.push({
+      obj: other,
+      speed: 0.08+Math.random()*0.05,
+      targetIndex: (i+1)%waypoints.length,
+      turning: false
+    });
   }
 
   // === ПОЛИЦИЯ ===
@@ -81,12 +118,6 @@
   scene.add(police);
 
   // === СВЕТОФОР ===
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.2,5,16), new THREE.MeshPhongMaterial({color:0x444444}));
-  pole.position.set(-2,2.5,-100);
-  scene.add(pole);
-  const lightBox = new THREE.Mesh(new THREE.BoxGeometry(1,2,1), new THREE.MeshPhongMaterial({color:0x111111}));
-  lightBox.position.set(-2,5,-100);
-  scene.add(lightBox);
   const redLight = new THREE.Mesh(new THREE.SphereGeometry(0.3,16,16), new THREE.MeshPhongMaterial({color:0xff0000}));
   redLight.position.set(-2,5.4,-99.5);
   scene.add(redLight);
@@ -96,9 +127,6 @@
 
   let green=true;
   setInterval(()=>{green=!green;},4000);
-
-  // === КАМЕРА ===
-  camera.position.set(0,6,12);
 
   // === УПРАВЛЕНИЕ ===
   let speed=0, rotationSpeed=0;
@@ -113,7 +141,7 @@
     if(['ArrowLeft','ArrowRight'].includes(e.key)) rotationSpeed=0;
   });
 
-  // === ПРОВЕРКА СТОЛКНОВЕНИЙ ===
+  // === СТОЛКНОВЕНИЯ ===
   function checkCollision(obj1, obj2){
     const box1 = new THREE.Box3().setFromObject(obj1);
     const box2 = new THREE.Box3().setFromObject(obj2);
@@ -121,44 +149,72 @@
   }
 
   // === АНИМАЦИЯ ===
+  let blink = false;
+  setInterval(()=>{blink=!blink;},500); // мигание поворотников
+
   function animate(){
     requestAnimationFrame(animate);
 
-    // временно перемещаем игрока
+    // игрок
     const oldPos = player.position.clone();
     player.rotation.y+=rotationSpeed;
     player.position.x+=Math.sin(player.rotation.y)*speed;
     player.position.z+=Math.cos(player.rotation.y)*speed;
 
-    // проверка столкновений (с домами, машинами и полицией)
-    let collided = false;
+    let collided=false;
     for(let h of houses){ if(checkCollision(player,h)) collided=true; }
     for(let t of traffic){ if(checkCollision(player,t.obj)) collided=true; }
     if(checkCollision(player,police)) collided=true;
+    if(collided) player.position.copy(oldPos);
 
-    // если столкновение — откатываем позицию
-    if(collided){ player.position.copy(oldPos); }
+    // стоп-сигналы игрока
+    player.lights.stop.forEach(l=>{
+      l.material.emissive.set(speed<0?0xff0000:0x000000);
+    });
+    player.lights.turnL.material.emissive.set(rotationSpeed>0? (blink?0xffa500:0x000000):0x000000);
+    player.lights.turnR.material.emissive.set(rotationSpeed<0? (blink?0xffa500:0x000000):0x000000);
 
-    // камера следует
+    // камера
     camera.position.x = player.position.x - Math.sin(player.rotation.y)*10;
     camera.position.z = player.position.z - Math.cos(player.rotation.y)*10;
+    camera.position.y = 6;
     camera.lookAt(player.position);
 
     // трафик
     for(let car of traffic){
-      if(green || car.obj.position.z < -102){ 
-        car.obj.position.z += car.speed;
-        if(car.obj.position.z>200) car.obj.position.z=-200;
+      const target = waypoints[car.targetIndex];
+      let dir = new THREE.Vector3().subVectors(target, car.obj.position);
+      let dist = dir.length();
+      dir.normalize();
+
+      car.obj.position.addScaledVector(dir, car.speed);
+
+      // поворот к направлению
+      const angle = Math.atan2(dir.x, dir.z);
+      car.obj.rotation.y = angle;
+
+      // поворотники у трафика
+      car.obj.lights.turnL.material.emissive.set(0x000000);
+      car.obj.lights.turnR.material.emissive.set(0x000000);
+      if(dist<20){ // скоро поворот
+        if(car.targetIndex===1 || car.targetIndex===3){
+          car.obj.lights.turnR.material.emissive.set(blink?0xffa500:0x000000);
+        } else {
+          car.obj.lights.turnL.material.emissive.set(blink?0xffa500:0x000000);
+        }
       }
+
+      if(dist<1){ car.targetIndex = (car.targetIndex+1)%waypoints.length; }
     }
 
-    // полиция едет за игроком
+    // полиция
     let dx=player.position.x-police.position.x;
     let dz=player.position.z-police.position.z;
     let dist=Math.sqrt(dx*dx+dz*dz);
     if(dist>5){
       police.position.x+=dx/dist*0.08;
       police.position.z+=dz/dist*0.08;
+      police.rotation.y=Math.atan2(dx,dz);
     }
 
     // светофор
