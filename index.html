@@ -3,132 +3,134 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>3D Мини-Гонка</title>
+  <title>3D Гонка по городу</title>
   <style>
     body { margin: 0; overflow: hidden; background: #87ceeb; }
   </style>
 </head>
 <body>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
-  <script>
-    // СЦЕНА + РЕНДЕРЕР
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
+<script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
+<script>
+  // СЦЕНА + РЕНДЕРЕР
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
 
-    // СВЕТ
-    const light = new THREE.DirectionalLight(0xffffff, 1);
-    light.position.set(10, 20, 10);
-    scene.add(light);
-    scene.add(new THREE.AmbientLight(0x404040));
+  // СВЕТ
+  scene.add(new THREE.AmbientLight(0x555555));
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(10, 20, 10);
+  scene.add(light);
 
-    // ДОРОГА
-    const roadGeometry = new THREE.PlaneGeometry(20, 500);
-    const roadMaterial = new THREE.MeshPhongMaterial({ color: 0x333333 });
-    const road = new THREE.Mesh(roadGeometry, roadMaterial);
+  // === ДОРОГИ ===
+  function makeRoad(width, height, x, z) {
+    const geom = new THREE.PlaneGeometry(width, height);
+    const mat = new THREE.MeshPhongMaterial({ color: 0x333333 });
+    const road = new THREE.Mesh(geom, mat);
     road.rotation.x = -Math.PI / 2;
+    road.position.set(x, 0, z);
     scene.add(road);
+    return road;
+  }
 
-    // РАЗМЕТКА ДОРОГИ
-    const stripeGeometry = new THREE.PlaneGeometry(1, 10);
-    const stripeMaterial = new THREE.MeshPhongMaterial({ color: 0xffff00 });
-    for (let z = -240; z < 250; z += 20) {
-      const stripe = new THREE.Mesh(stripeGeometry, stripeMaterial);
-      stripe.rotation.x = -Math.PI / 2;
-      stripe.position.set(0, 0.01, z);
-      scene.add(stripe);
-    }
+  // Основная улица
+  makeRoad(20, 200, 0, 0);
+  // Перекрёсток
+  makeRoad(60, 60, 0, -100);
+  // Повороты и боковые улицы
+  makeRoad(200, 20, -100, -100);
+  makeRoad(200, 20, 100, -100);
 
-    // МАШИНА (корпус + кабина + колёса)
-    const car = new THREE.Group();
+  // === ДОМА ===
+  function makeHouse(x, z) {
+    const geom = new THREE.BoxGeometry(8, Math.random() * 6 + 6, 8);
+    const mat = new THREE.MeshPhongMaterial({ color: 0x8b4513 });
+    const house = new THREE.Mesh(geom, mat);
+    house.position.set(x, geom.parameters.height / 2, z);
+    scene.add(house);
+    return house;
+  }
 
-    const bodyGeometry = new THREE.BoxGeometry(2, 0.5, 4);
-    const bodyMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 });
-    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    body.position.y = 0.25;
-    car.add(body);
+  // Ряды домов по бокам
+  for (let z = -200; z < 200; z += 40) {
+    makeHouse(-15, z);
+    makeHouse(15, z);
+  }
+  for (let x = -200; x < 200; x += 40) {
+    makeHouse(x, -115);
+    makeHouse(x, -85);
+  }
 
-    const cabinGeometry = new THREE.BoxGeometry(1.5, 0.5, 2);
-    const cabinMaterial = new THREE.MeshPhongMaterial({ color: 0x0000ff });
-    const cabin = new THREE.Mesh(cabinGeometry, cabinMaterial);
-    cabin.position.set(0, 0.75, -0.5);
-    car.add(cabin);
+  // === МАШИНА ===
+  const car = new THREE.Group();
 
-    const wheelGeometry = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 16);
-    const wheelMaterial = new THREE.MeshPhongMaterial({ color: 0x000000 });
-    function makeWheel(x, z) {
-      const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-      wheel.rotation.z = Math.PI / 2;
-      wheel.position.set(x, 0.2, z);
-      car.add(wheel);
-    }
-    makeWheel(-1, -1.5);
-    makeWheel(1, -1.5);
-    makeWheel(-1, 1.5);
-    makeWheel(1, 1.5);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2, 0.5, 4), new THREE.MeshPhongMaterial({ color: 0xff0000 }));
+  body.position.y = 0.25;
+  car.add(body);
 
-    scene.add(car);
-    car.position.set(0, 0.2, 0);
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.5, 2), new THREE.MeshPhongMaterial({ color: 0x0000ff }));
+  cabin.position.set(0, 0.75, -0.5);
+  car.add(cabin);
 
-    // ДОМА
-    const houses = [];
-    for (let z = -200; z < 200; z += 40) {
-      const houseGeometry = new THREE.BoxGeometry(6, 8, 6);
-      const houseMaterial = new THREE.MeshPhongMaterial({ color: 0x8b4513 });
-      const houseLeft = new THREE.Mesh(houseGeometry, houseMaterial);
-      houseLeft.position.set(-15, 4, z);
-      scene.add(houseLeft);
-      houses.push(houseLeft);
+  const wheelGeom = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 16);
+  const wheelMat = new THREE.MeshPhongMaterial({ color: 0x000000 });
+  function addWheel(x, z) {
+    const wheel = new THREE.Mesh(wheelGeom, wheelMat);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(x, 0.2, z);
+    car.add(wheel);
+  }
+  addWheel(-1, -1.5); addWheel(1, -1.5);
+  addWheel(-1,  1.5); addWheel(1,  1.5);
 
-      const houseRight = new THREE.Mesh(houseGeometry, houseMaterial);
-      houseRight.position.set(15, 4, z + 20);
-      scene.add(houseRight);
-      houses.push(houseRight);
-    }
+  car.position.set(0, 0.2, 0);
+  scene.add(car);
 
-    // КАМЕРА
-    camera.position.set(0, 5, 10);
+  // === КАМЕРА ===
+  camera.position.set(0, 6, 12);
+  camera.lookAt(car.position);
+
+  // === УПРАВЛЕНИЕ ===
+  let speed = 0;
+  let rotationSpeed = 0;
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowUp') speed = 0.3;
+    if (e.key === 'ArrowDown') speed = -0.2;
+    if (e.key === 'ArrowLeft') rotationSpeed = 0.05;
+    if (e.key === 'ArrowRight') rotationSpeed = -0.05;
+  });
+
+  document.addEventListener('keyup', e => {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') speed = 0;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') rotationSpeed = 0;
+  });
+
+  // === АНИМАЦИЯ ===
+  function animate() {
+    requestAnimationFrame(animate);
+
+    car.rotation.y += rotationSpeed;
+    car.position.x += Math.sin(car.rotation.y) * speed;
+    car.position.z += Math.cos(car.rotation.y) * speed;
+
+    camera.position.x = car.position.x - Math.sin(car.rotation.y) * 10;
+    camera.position.z = car.position.z - Math.cos(car.rotation.y) * 10;
+    camera.position.y = car.position.y + 6;
     camera.lookAt(car.position);
 
-    // УПРАВЛЕНИЕ
-    let speed = 0;
-    let rotationSpeed = 0;
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowUp') speed = 0.3;
-      if (e.key === 'ArrowDown') speed = -0.2;
-      if (e.key === 'ArrowLeft') rotationSpeed = 0.05;
-      if (e.key === 'ArrowRight') rotationSpeed = -0.05;
-    });
-    document.addEventListener('keyup', (e) => {
-      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') speed = 0;
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') rotationSpeed = 0;
-    });
+    renderer.render(scene, camera);
+  }
+  animate();
 
-    // АНИМАЦИЯ
-    function animate() {
-      requestAnimationFrame(animate);
-
-      car.rotation.y += rotationSpeed;
-      car.position.x += Math.sin(car.rotation.y) * speed;
-      car.position.z += Math.cos(car.rotation.y) * speed;
-
-      camera.position.x = car.position.x - Math.sin(car.rotation.y) * 10;
-      camera.position.z = car.position.z - Math.cos(car.rotation.y) * 10;
-      camera.position.y = car.position.y + 5;
-      camera.lookAt(car.position);
-
-      renderer.render(scene, camera);
-    }
-    animate();
-
-    // АДАПТАЦИЯ ПОД ОКНО
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-  </script>
+  // === АДАПТАЦИЯ ===
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+</script>
 </body>
 </html>
